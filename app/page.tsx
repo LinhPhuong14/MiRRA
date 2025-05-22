@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import type React from "react"
+
+import { useState, useRef, useEffect, useCallback } from "react"
 import Image from "next/image"
 import { motion, useScroll, useTransform } from "framer-motion"
 import { Button } from "@/components/ui/button"
@@ -8,6 +10,8 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
 import { Camera, Upload, MessageSquare, ChevronRight, ChevronLeft, Send, ArrowRight } from "lucide-react"
+import { toast } from "@/components/ui/use-toast"
+import { Toaster } from "@/components/ui/toaster"
 
 // Sparkle component
 const Sparkle = ({ size = "sm", color = "white", delay = 0, duration = 2, className = "" }) => {
@@ -95,6 +99,10 @@ export default function Home() {
     { text: "Hi there! I'm your smart stylist. What's your style preference today?", sender: "bot" },
   ])
   const [messageInput, setMessageInput] = useState("")
+  const [isDragging, setIsDragging] = useState(false)
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const featuresRef = useRef(null)
   const tryOnRef = useRef(null)
@@ -195,6 +203,74 @@ export default function Home() {
 
   const scrollToSection = (ref) => {
     ref.current.scrollIntoView({ behavior: "smooth" })
+  }
+
+  const handleFileChange = useCallback((files: FileList | null) => {
+    if (!files || files.length === 0) return
+
+    const file = files[0]
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload an image file (JPEG, PNG, etc.)",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please upload an image smaller than 5MB",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsUploading(true)
+
+    // Create a URL for the image
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setUploadedImage(e.target?.result as string)
+      setIsUploading(false)
+      toast({
+        title: "Image uploaded",
+        description: "Your photo has been uploaded successfully",
+      })
+    }
+    reader.onerror = () => {
+      setIsUploading(false)
+      toast({
+        title: "Upload failed",
+        description: "There was an error uploading your image",
+        variant: "destructive",
+      })
+    }
+    reader.readAsDataURL(file)
+  }, [])
+
+  const handleButtonClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsDragging(false)
+    handleFileChange(e.dataTransfer.files)
   }
 
   return (
@@ -431,8 +507,29 @@ export default function Home() {
               </p>
 
               <div className="flex flex-col gap-4">
-                <Button className="flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 shadow-lg">
-                  <Upload className="w-5 h-5" /> Upload Photo
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept="image/*"
+                  onChange={(e) => handleFileChange(e.target.files)}
+                />
+
+                <Button
+                  className="flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 shadow-lg"
+                  onClick={handleButtonClick}
+                  disabled={isUploading}
+                >
+                  {isUploading ? (
+                    <>
+                      <div className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin mr-2"></div>
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-5 h-5" /> Upload Photo
+                    </>
+                  )}
                 </Button>
 
                 <Button
@@ -442,8 +539,19 @@ export default function Home() {
                   <Camera className="w-5 h-5" /> Use Camera
                 </Button>
 
-                <div className="mt-4 p-4 border border-dashed border-purple-700 rounded-lg text-center text-gray-400 bg-purple-900/20">
-                  Drag and drop your photo here or use the buttons above
+                <div
+                  className={`mt-4 p-4 border border-dashed rounded-lg text-center transition-all duration-300 ${
+                    isDragging ? "border-pink-500 bg-pink-500/10 scale-105" : "border-purple-700 bg-purple-900/20"
+                  }`}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
+                  {isDragging ? (
+                    <p className="text-pink-300">Drop your photo here</p>
+                  ) : (
+                    <p className="text-gray-400">Drag and drop your photo here or use the buttons above</p>
+                  )}
                 </div>
               </div>
             </motion.div>
@@ -456,14 +564,27 @@ export default function Home() {
               variants={fadeInRight}
             >
               <h3 className="text-2xl font-semibold mb-6 text-purple-300">Try-On Results</h3>
-              <div className="aspect-[3/4] bg-gradient-to-br from-gray-800 to-purple-900 rounded-lg flex items-center justify-center mb-4 border border-purple-700">
-                <Image
-                  src="/placeholder.svg?height=400&width=300"
-                  alt="Virtual Try-On Result"
-                  width={300}
-                  height={400}
-                  className="rounded-lg"
-                />
+              <div className="aspect-[3/4] bg-gradient-to-br from-gray-800 to-purple-900 rounded-lg flex items-center justify-center mb-4 border border-purple-700 overflow-hidden">
+                {uploadedImage ? (
+                  <Image
+                    src={uploadedImage || "/placeholder.svg"}
+                    alt="Your uploaded photo"
+                    width={300}
+                    height={400}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="text-center p-4">
+                    <Image
+                      src="/placeholder.svg?height=400&width=300"
+                      alt="Virtual Try-On Result"
+                      width={300}
+                      height={400}
+                      className="rounded-lg mb-4"
+                    />
+                    <p className="text-gray-400 text-sm">Upload a photo to see virtual try-on results</p>
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-4 gap-2">
                 {[1, 2, 3, 4].map((item) => (
@@ -903,6 +1024,8 @@ export default function Home() {
           </div>
         </div>
       </footer>
+      <Toaster />
     </main>
   )
 }
+

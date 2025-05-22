@@ -1,0 +1,3 @@
+[submodule "server/webVITON"]
+	path = server/webVITON
+	url = https://github.com/nguyendinhhieu1309/WebVITON.git
